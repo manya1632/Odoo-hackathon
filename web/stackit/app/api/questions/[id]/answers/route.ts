@@ -1,22 +1,16 @@
 import { NextResponse } from "next/server"
 import { createAnswer, getAnswersForQuestion, getUserById } from "@/lib/db"
-import { Answer } from "@/lib/types"
+import type { Answer } from "@/lib/types"
 
-// GET /api/questions/[id]/answers
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    const { id: questionId } = params
-    const answers = getAnswersForQuestion(questionId)
+    // Await params directly as per the error message
+    const { id: questionId } = await params
+    const answers = await getAnswersForQuestion(questionId)
 
     const answersWithAuthors = answers.map((a) => {
       const author = getUserById(a.authorId)
-      return {
-        ...a,
-        authorName: author?.name || "Unknown",
-      }
+      return { ...a, authorName: author?.name || "Unknown" }
     })
 
     return NextResponse.json(answersWithAuthors)
@@ -26,13 +20,10 @@ export async function GET(
   }
 }
 
-// POST /api/questions/[id]/answers
-export async function POST(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
-    const { id: questionId } = params
+    // Await params directly as per the error message
+    const { id: questionId } = await params
     const { content, authorId } = await req.json()
 
     if (!content || !authorId) {
@@ -44,8 +35,7 @@ export async function POST(
       content,
       authorId,
     }
-
-    const createdAnswer = createAnswer(newAnswer)
+    const createdAnswer = await createAnswer(newAnswer)
     return NextResponse.json(createdAnswer, { status: 201 })
   } catch (error) {
     console.error("Error creating answer:", error)

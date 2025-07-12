@@ -33,11 +33,11 @@ export default function AnswerForm({ questionId }: AnswerFormProps) {
     })
 
     if (res.ok) {
-      toast.success("Your answer has been successfully submitted.") // ✅ success toast
+      toast.success("Your answer has been successfully submitted.")
       setAnswerContent("")
       router.refresh()
     } else {
-      toast.error("Failed to post answer. Please try again.") // ✅ error toast
+      toast.error("Failed to post answer. Please try again.")
     }
 
     setIsSubmitting(false)

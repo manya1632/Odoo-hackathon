@@ -1,4 +1,4 @@
-"use client"
+// This file remains a Server Component (no "use client")
 
 import type { Answer, Question } from "@/lib/types"
 import RichTextEditor from "@/components/RickTextEditor"
@@ -10,7 +10,7 @@ import AnswerForm from "./answer-form"
 import { Card } from "@/components/ui/card"
 
 interface QuestionPageProps {
-  params: { id: string }
+  params: Promise<{ id: string }> // params is a Promise in Next.js 15 [^1][^3]
 }
 
 async function getQuestionData(id: string) {
@@ -18,6 +18,8 @@ async function getQuestionData(id: string) {
     cache: "no-store",
   })
   if (!res.ok) {
+    const errorText = await res.text()
+    console.error(`Failed to fetch question data for ID ${id}: ${res.status} ${res.statusText} - ${errorText}`)
     throw new Error("Failed to fetch question")
   }
   const question: Question = await res.json()
@@ -26,7 +28,14 @@ async function getQuestionData(id: string) {
     `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/users/${question.authorId}`,
     { cache: "no-store" },
   )
-  const author = authorRes.ok ? await authorRes.json() : { name: "Unknown" }
+  if (!authorRes.ok) {
+    const errorText = await authorRes.text()
+    console.error(
+      `Failed to fetch author data for ID ${question.authorId}: ${authorRes.status} ${authorRes.statusText} - ${errorText}`,
+    )
+    return { question, authorName: "Unknown" }
+  }
+  const author = await authorRes.json()
 
   return { question, authorName: author.name }
 }
@@ -37,6 +46,10 @@ async function getAnswersData(questionId: string) {
     { cache: "no-store" },
   )
   if (!res.ok) {
+    const errorText = await res.text()
+    console.error(
+      `Failed to fetch answers for question ID ${questionId}: ${res.status} ${res.statusText} - ${errorText}`,
+    )
     throw new Error("Failed to fetch answers")
   }
   const answers: Answer[] = await res.json()
@@ -47,7 +60,14 @@ async function getAnswersData(questionId: string) {
         `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/users/${a.authorId}`,
         { cache: "no-store" },
       )
-      const author = authorRes.ok ? await authorRes.json() : { name: "Unknown" }
+      if (!authorRes.ok) {
+        const errorText = await authorRes.text()
+        console.error(
+          `Failed to fetch author data for answer author ID ${a.authorId}: ${authorRes.status} ${authorRes.statusText} - ${errorText}`,
+        )
+        return { ...a, authorName: "Unknown" }
+      }
+      const author = await authorRes.json()
       return { ...a, authorName: author.name }
     }),
   )
@@ -56,8 +76,10 @@ async function getAnswersData(questionId: string) {
 }
 
 export default async function QuestionPage({ params }: QuestionPageProps) {
-  const { question, authorName } = await getQuestionData(params.id)
-  const answers = await getAnswersData(params.id)
+  const { id } = await params
+
+  const { question, authorName } = await getQuestionData(id)
+  const answers = await getAnswersData(id)
 
   return (
     <section className="py-8 max-w-4xl mx-auto">
@@ -73,7 +95,8 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
             </span>
           ))}
         </div>
-        <RichTextEditor content={question.description} onChange={() => {}} editable={false} />
+        {/* Removed onChange prop as it's not needed for display-only RichTextEditor */}
+        <RichTextEditor content={question.description} editable={false} />
         <div className="flex items-center justify-between text-sm text-muted-foreground mt-4">
           <span>Asked by {authorName}</span>
           <span>{formatDistanceToNow(new Date(question.createdAt), { addSuffix: true })}</span>
@@ -91,12 +114,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
               answer={answer}
               authorName={answer.authorName}
               question={question}
-              onVote={() => {
-                /* Revalidate data or update state */
-              }}
-              onAccept={() => {
-                /* Revalidate data or update state */
-              }}
+              // Removed onVote and onAccept props
             />
           ))
         )}

@@ -6,16 +6,17 @@ import { Button } from "@/components/ui/button"
 import RichTextEditor from "./RickTextEditor"
 import { formatDistanceToNow } from "date-fns"
 import { useState } from "react"
+import { useRouter } from "next/navigation" // Import useRouter
 
 interface AnswerCardProps {
   answer: Answer
   authorName: string
   question: Question
-  onVote: (answerId: string, type: "up" | "down") => void
-  onAccept: (answerId: string) => void
+  // Removed onVote and onAccept props as they cannot be passed from Server Components
 }
 
-export default function AnswerCard({ answer, authorName, question, onVote, onAccept }: AnswerCardProps) {
+export default function AnswerCard({ answer, authorName, question }: AnswerCardProps) {
+  const router = useRouter() // Initialize useRouter
   const isAccepted = question.acceptedAnswerId === answer.id
   const isQuestionOwner = question.authorId === CURRENT_USER_ID
   const hasUpvoted = answer.upvotes.includes(CURRENT_USER_ID)
@@ -31,7 +32,7 @@ export default function AnswerCard({ answer, authorName, question, onVote, onAcc
     if (response.ok) {
       const updatedAnswer = await response.json()
       setCurrentAnswer(updatedAnswer)
-      onVote(updatedAnswer.id, voteType) // Propagate update to parent if needed
+      router.refresh() // Revalidate the current page to show updated votes
     }
   }
 
@@ -42,7 +43,7 @@ export default function AnswerCard({ answer, authorName, question, onVote, onAcc
       body: JSON.stringify({ questionId: question.id }),
     })
     if (response.ok) {
-      onAccept(currentAnswer.id) // Propagate update to parent
+      router.refresh() // Revalidate the current page to show accepted answer
     }
   }
 
@@ -73,7 +74,7 @@ export default function AnswerCard({ answer, authorName, question, onVote, onAcc
           </Button>
         </div>
         <div className="flex-1">
-          <RichTextEditor content={currentAnswer.content} onChange={() => {}} editable={false} />
+          <RichTextEditor content={currentAnswer.content} editable={false} /> {/* Removed onChange */}
           <div className="flex items-center justify-between text-sm text-muted-foreground mt-4">
             <span>Answered by {authorName}</span>
             <span>{formatDistanceToNow(new Date(currentAnswer.createdAt), { addSuffix: true })}</span>

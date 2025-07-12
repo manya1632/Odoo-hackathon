@@ -3,14 +3,14 @@ import { getQuestionById, getUserById } from "@/lib/db"
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    const { id } = params
+    // Await params directly as per the error message
+    const { id } = await params
     const question = await getQuestionById(id)
 
     if (!question) {
       return NextResponse.json({ error: "Question not found" }, { status: 404 })
     }
 
-    // In a real app, you'd fetch from MongoDB and potentially populate author details
     const author = await getUserById(question.authorId)
     const questionWithAuthor = { ...question, authorName: author?.name || "Unknown" }
 

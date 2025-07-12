@@ -8,7 +8,7 @@ import { useEffect } from "react"
 
 interface RichTextEditorProps {
   content: string
-  onChange: (html: string) => void
+  onChange?: (html: string) => void 
   editable?: boolean
 }
 
@@ -22,9 +22,11 @@ export default function RichTextEditor({ content, onChange, editable = true }: R
       }),
     ],
     content: content,
-    onUpdate: ({ editor }) => {
-      onChange(editor.getHTML())
-    },
+    onUpdate: onChange
+      ? ({ editor }) => {
+          onChange(editor.getHTML())
+        }
+      : undefined, // Only provide onUpdate if onChange is provided
     editable: editable,
     editorProps: {
       attributes: {
