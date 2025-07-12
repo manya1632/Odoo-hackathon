@@ -1,24 +1,15 @@
-import type { Question } from "@/lib/types"
 import QuestionCard from "@/components/QuestionCard"
+import { getQuestions, getUserById, convertToUserInterface } from "@/lib/db" // Import getQuestions, getUserById, convertToUserInterface
 
 async function getQuestionsData() {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/questions`, {
-    cache: "no-store",
-  })
-  if (!res.ok) {
-    throw new Error("Failed to fetch questions")
-  }
-  const questions: Question[] = await res.json()
+  const questions = await getQuestions() // This now returns Question[] directly
 
   // Fetch author names for each question
   const questionsWithAuthors = await Promise.all(
     questions.map(async (q) => {
-      const authorRes = await fetch(
-        `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/users/${q.authorId}`,
-        { cache: "no-store" },
-      )
-      const author = authorRes.ok ? await authorRes.json() : { name: "Unknown" }
-      return { ...q, authorName: author.name }
+      const authorRes = await getUserById(q.authorId) // This returns a lean Mongoose doc
+      const author = authorRes ? convertToUserInterface(authorRes) : null // Convert to User interface
+      return { ...q, authorName: author?.name || "Unknown" }
     }),
   )
 

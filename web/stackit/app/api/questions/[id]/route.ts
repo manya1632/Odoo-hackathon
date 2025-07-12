@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server"
-import { getQuestionById, getUserById } from "@/lib/db"
+import { getQuestionById, getUserById, convertToUserInterface, convertToQuestionInterface } from "@/lib/db" 
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    // Await params directly as per the error message
-    const { id } = await params
-    const question = await getQuestionById(id)
-
-    if (!question) {
+    const { id } = params // params is already awaited by Next.js 15
+    const questionDoc = await getQuestionById(id) // This returns a lean Mongoose doc
+    if (!questionDoc) {
       return NextResponse.json({ error: "Question not found" }, { status: 404 })
     }
 
-    const author = await getUserById(question.authorId)
+    const question = convertToQuestionInterface(questionDoc) // Convert to Question interface
+
+    const authorDoc = await getUserById(question.authorId) // This returns a lean Mongoose doc
+    const author = authorDoc ? convertToUserInterface(authorDoc) : null // Convert to User interface
     const questionWithAuthor = { ...question, authorName: author?.name || "Unknown" }
 
     return NextResponse.json(questionWithAuthor)

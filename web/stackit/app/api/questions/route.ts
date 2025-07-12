@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server"
-import { getQuestions, getUserById, createQuestion } from "@/lib/db"
-import { Question } from "@/lib/types"
+import { QuestionModel, UserModel, convertToUserInterface } from "@/lib/db"
+import { verifyAuth } from "@/lib/server-auth" // UPDATED IMPORT
 
-// GET /api/questions
 export async function GET() {
   try {
-    const questions = getQuestions()
+    const questions = await QuestionModel.find({}).sort({ createdAt: -1 }).lean()
 
-    const questionsWithAuthors = questions.map((q) => {
-      const author = getUserById(q.authorId)
-      return {
-        ...q,
-        authorName: author?.name || "Unknown",
-      }
-    })
-
+    const questionsWithAuthors = await Promise.all(
+      questions.map(async (q) => {
+        const authorDoc = await UserModel.findById(q.authorId).lean()
+        const author = authorDoc ? convertToUserInterface(authorDoc) : null
+        return { ...q, authorName: author?.name || "Unknown" }
+      }),
+    )
     return NextResponse.json(questionsWithAuthors)
   } catch (error) {
     console.error("Error fetching questions:", error)
@@ -22,24 +20,26 @@ export async function GET() {
   }
 }
 
-// POST /api/questions
 export async function POST(req: Request) {
   try {
-    const { title, description, tags, authorId } = await req.json()
+    const { user, error } = await verifyAuth(req) // Verify authentication
+    if (error || !user) {
+      return NextResponse.json({ error: error || "Unauthorized" }, { status: 401 })
+    }
 
-    if (!title || !description || !authorId) {
+    const { title, description, tags } = await req.json()
+
+    if (!title || !description) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    const newQuestion: Omit<Question, "id" | "createdAt" | "updatedAt"> = {
+    const newQuestion = await QuestionModel.create({
       title,
       description,
       tags: tags || [],
-      authorId,
-    }
-
-    const createdQuestion = createQuestion(newQuestion)
-    return NextResponse.json(createdQuestion, { status: 201 })
+      authorId: user.id, // Use authenticated user's MongoDB 'id' from the User interface
+    })
+    return NextResponse.json(newQuestion, { status: 201 })
   } catch (error) {
     console.error("Error creating question:", error)
     return NextResponse.json({ error: "Failed to create question" }, { status: 500 })

@@ -1,74 +1,45 @@
-// This file remains a Server Component (no "use client")
-
-import type { Answer, Question } from "@/lib/types"
-import RichTextEditor from "@/components/RickTextEditor"
+import RichTextEditor from "@/components/RichTextEditor"
 import AnswerCard from "@/components/AnswerCard"
 import { Separator } from "@/components/ui/separator"
 import { formatDistanceToNow } from "date-fns"
 import { Suspense } from "react"
 import AnswerForm from "./answer-form"
 import { Card } from "@/components/ui/card"
+import {
+  getQuestionById,
+  getAnswersForQuestion,
+  getUserById,
+  convertToUserInterface,
+  convertToQuestionInterface,
+  convertToAnswerInterface,
+} from "@/lib/db" // Import conversion helpers
 
 interface QuestionPageProps {
   params: Promise<{ id: string }> // params is a Promise in Next.js 15 [^1][^3]
 }
 
 async function getQuestionData(id: string) {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/questions/${id}`, {
-    cache: "no-store",
-  })
-  if (!res.ok) {
-    const errorText = await res.text()
-    console.error(`Failed to fetch question data for ID ${id}: ${res.status} ${res.statusText} - ${errorText}`)
+  const questionDoc = await getQuestionById(id) // This returns a lean Mongoose doc
+  if (!questionDoc) {
     throw new Error("Failed to fetch question")
   }
-  const question: Question = await res.json()
+  const question = convertToQuestionInterface(questionDoc) // Convert to Question interface
 
-  const authorRes = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/users/${question.authorId}`,
-    { cache: "no-store" },
-  )
-  if (!authorRes.ok) {
-    const errorText = await authorRes.text()
-    console.error(
-      `Failed to fetch author data for ID ${question.authorId}: ${authorRes.status} ${authorRes.statusText} - ${errorText}`,
-    )
-    return { question, authorName: "Unknown" }
-  }
-  const author = await authorRes.json()
+  const authorDoc = await getUserById(question.authorId) // This returns a lean Mongoose doc
+  const author = authorDoc ? convertToUserInterface(authorDoc) : null // Convert to User interface
 
-  return { question, authorName: author.name }
+  return { question, authorName: author?.name || "Unknown" }
 }
 
 async function getAnswersData(questionId: string) {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/questions/${questionId}/answers`,
-    { cache: "no-store" },
-  )
-  if (!res.ok) {
-    const errorText = await res.text()
-    console.error(
-      `Failed to fetch answers for question ID ${questionId}: ${res.status} ${res.statusText} - ${errorText}`,
-    )
-    throw new Error("Failed to fetch answers")
-  }
-  const answers: Answer[] = await res.json()
+  const answerDocs = await getAnswersForQuestion(questionId) // This returns lean Mongoose docs
 
   const answersWithAuthors = await Promise.all(
-    answers.map(async (a) => {
-      const authorRes = await fetch(
-        `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/users/${a.authorId}`,
-        { cache: "no-store" },
-      )
-      if (!authorRes.ok) {
-        const errorText = await authorRes.text()
-        console.error(
-          `Failed to fetch author data for answer author ID ${a.authorId}: ${authorRes.status} ${authorRes.statusText} - ${errorText}`,
-        )
-        return { ...a, authorName: "Unknown" }
-      }
-      const author = await authorRes.json()
-      return { ...a, authorName: author.name }
+    answerDocs.map(async (a) => {
+      const answer = convertToAnswerInterface(a) // Convert to Answer interface
+      const authorDoc = await getUserById(answer.authorId) // This returns a lean Mongoose doc
+      const author = authorDoc ? convertToUserInterface(authorDoc) : null // Convert to User interface
+      return { ...answer, authorName: author?.name || "Unknown" }
     }),
   )
 
@@ -110,7 +81,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
         ) : (
           answers.map((answer) => (
             <AnswerCard
-              key={answer.id}
+              key={answer.id} // Use answer.id
               answer={answer}
               authorName={answer.authorName}
               question={question}
@@ -124,7 +95,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
 
       <h2 className="text-2xl font-bold mb-4">Your Answer</h2>
       <Suspense fallback={<div>Loading editor...</div>}>
-        <AnswerForm questionId={question.id} />
+        <AnswerForm questionId={question.id} /> {/* Use question.id */}
       </Suspense>
     </section>
   )

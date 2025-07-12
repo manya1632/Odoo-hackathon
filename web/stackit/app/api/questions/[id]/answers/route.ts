@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server"
-import { createAnswer, getAnswersForQuestion, getUserById } from "@/lib/db"
-import type { Answer } from "@/lib/types"
+import { AnswerModel, UserModel, convertToUserInterface, convertToAnswerInterface } from "@/lib/db"
+import { verifyAuth } from "@/lib/server-auth" // UPDATED IMPORT
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    // Await params directly as per the error message
-    const { id: questionId } = await params
-    const answers = await getAnswersForQuestion(questionId)
+    const { id: questionId } = params
+    const answerDocs = await AnswerModel.find({ questionId }).sort({ createdAt: 1 }).lean()
 
-    const answersWithAuthors = answers.map((a) => {
-      const author = getUserById(a.authorId)
-      return { ...a, authorName: author?.name || "Unknown" }
-    })
+    const answersWithAuthors = await Promise.all(
+      answerDocs.map(async (aDoc) => {
+        const answer = convertToAnswerInterface(aDoc)
+        const authorDoc = await UserModel.findById(answer.authorId).lean()
+        const author = authorDoc ? convertToUserInterface(authorDoc) : null
+        return { ...answer, authorName: author?.name || "Unknown" }
+      }),
+    )
 
     return NextResponse.json(answersWithAuthors)
   } catch (error) {
@@ -22,21 +25,24 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
-    // Await params directly as per the error message
-    const { id: questionId } = await params
-    const { content, authorId } = await req.json()
+    const { user, error } = await verifyAuth(req) // Verify authentication
+    if (error || !user) {
+      return NextResponse.json({ error: error || "Unauthorized" }, { status: 401 })
+    }
 
-    if (!content || !authorId) {
+    const { id: questionId } = params
+    const { content } = await req.json()
+
+    if (!content) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    const newAnswer: Omit<Answer, "id" | "createdAt" | "updatedAt" | "upvotes" | "downvotes"> = {
+    const newAnswer = await AnswerModel.create({
       questionId,
       content,
-      authorId,
-    }
-    const createdAnswer = await createAnswer(newAnswer)
-    return NextResponse.json(createdAnswer, { status: 201 })
+      authorId: user.id, // Use authenticated user's MongoDB 'id' from the User interface
+    })
+    return NextResponse.json(convertToAnswerInterface(newAnswer.toObject()), { status: 201 })
   } catch (error) {
     console.error("Error creating answer:", error)
     return NextResponse.json({ error: "Failed to create answer" }, { status: 500 })

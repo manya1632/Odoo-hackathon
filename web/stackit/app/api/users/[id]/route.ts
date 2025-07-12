@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server"
-import { getUserById } from "@/lib/db"
+import { UserModel, convertToUserInterface } from "@/lib/db"
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    // Await params directly as per the error message
-    const { id } = await params
-    const user = getUserById(id)
+    const { id } = params
+    // When fetching user by Firebase UID, use findOne({ firebaseUid: id })
+    // The `id` param here is the Firebase UID, not MongoDB _id
+    const userDoc = await UserModel.findOne({ firebaseUid: id }).lean()
 
-    if (!user) {
+    if (!userDoc) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    const { email, ...publicUser } = user
+    const user = convertToUserInterface(userDoc)
+    const { firebaseUid, ...publicUser } = user
     return NextResponse.json(publicUser)
   } catch (error) {
     console.error("Error fetching user:", error)

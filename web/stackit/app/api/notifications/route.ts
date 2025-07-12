@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server"
-import { getNotificationsForUser, getUnreadNotificationCount, markNotificationAsRead } from "@/lib/db"
-import { CURRENT_USER_ID } from "@/lib/types"
+import { NotificationModel, convertToNotificationInterface } from "@/lib/db"
+import { verifyAuth } from "@/lib/server-auth" // UPDATED IMPORT
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    // In a real app, userId would come from authenticated session
-    const userId = CURRENT_USER_ID
-    const notifications = await getNotificationsForUser(userId)
-    const unreadCount = await getUnreadNotificationCount(userId)
+    const { user, error } = await verifyAuth(req) // Verify authentication
+    if (error || !user) {
+      return NextResponse.json({ error: error || "Unauthorized" }, { status: 401 })
+    }
+
+    const notificationDocs = await NotificationModel.find({ userId: user.id }).sort({ createdAt: -1 }).lean()
+    const notifications = notificationDocs.map(convertToNotificationInterface)
+
+    const unreadCount = await NotificationModel.countDocuments({ userId: user.id, read: false })
+
     return NextResponse.json({ notifications, unreadCount })
   } catch (error) {
     console.error("Error fetching notifications:", error)
@@ -17,6 +23,11 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   try {
+    const { user, error } = await verifyAuth(req) // Verify authentication
+    if (error || !user) {
+      return NextResponse.json({ error: error || "Unauthorized" }, { status: 401 })
+    }
+
     const { searchParams } = new URL(req.url)
     const id = searchParams.get("id")
 
@@ -24,7 +35,14 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "Notification ID is required" }, { status: 400 })
     }
 
-    await markNotificationAsRead(id)
+    const notification = await NotificationModel.findById(id)
+    if (!notification || notification.userId.toString() !== user.id.toString()) {
+      return NextResponse.json({ error: "Unauthorized to update this notification" }, { status: 403 })
+    }
+
+    notification.read = true
+    await notification.save()
+
     return NextResponse.json({ message: "Notification marked as read" })
   } catch (error) {
     console.error("Error marking notification as read:", error)

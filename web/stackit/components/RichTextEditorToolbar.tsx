@@ -1,51 +1,24 @@
 "use client"
 
-import { useEditor, EditorContent, type Editor } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import Link from '@tiptap/extension-link'
-import { useState } from "react"
-import {
-  Bold,
-  Italic,
-  List,
-  ListOrdered,
-  Strikethrough,
-  LinkIcon,
-  Unlink,
-} from "lucide-react"
+import type { Editor } from "@tiptap/react"
+import { Bold, Italic, List, ListOrdered, Strikethrough, LinkIcon, Unlink } from "lucide-react"
 
 import { Toggle } from "@/components/ui/toggle"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { useState } from "react"
 
 interface RichTextEditorToolbarProps {
   editor: Editor | null
 }
 
-// const editor = useEditor({
-//   extensions: [
-//     StarterKit,
-//     Link.configure
-//     ({
-//       openOnClick: false,
-//       linkOnPaste: true,
-//       autolink: true,
-//     }),
-//   ],
-//   content: '<p>Hello world</p>',
-// })
-
-export default function RichTextEditorToolbar({
-  editor,
-}: RichTextEditorToolbarProps) {
+export default function RichTextEditorToolbar({ editor }: RichTextEditorToolbarProps) {
   const [url, setUrl] = useState("")
 
-  if (!editor) return null
+  if (!editor) {
+    return null
+  }
 
   const setLink = () => {
     if (url) {
@@ -103,9 +76,7 @@ export default function RichTextEditorToolbar({
             size="sm"
             pressed={editor.isActive("link")}
             aria-label="Toggle link"
-            onClick={() =>
-              setUrl(editor.getAttributes("link")?.href ?? "")
-            }
+            onClick={() => setUrl(editor.getAttributes("link").href || "")}
           >
             <LinkIcon className="h-4 w-4" />
           </Toggle>
@@ -123,13 +94,7 @@ export default function RichTextEditorToolbar({
               {editor.isActive("link") ? "Update" : "Add"}
             </Button>
             {editor.isActive("link") && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  editor.chain().focus().unsetLink().run()
-                }
-              >
+              <Button size="sm" variant="outline" onClick={() => editor.chain().focus().unsetLink().run()}>
                 <Unlink className="h-4 w-4" />
               </Button>
             )}

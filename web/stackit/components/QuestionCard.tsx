@@ -1,6 +1,6 @@
 import Link from "next/link"
 import type { Question } from "@/lib/types"
-import { formatDistanceToNow } from "date-fns" 
+import { formatDistanceToNow } from "date-fns"
 
 interface QuestionCardProps {
   question: Question
@@ -9,10 +9,11 @@ interface QuestionCardProps {
 
 export default function QuestionCard({ question, authorName }: QuestionCardProps) {
   return (
-    <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
-      <Link href={`/questions/${question.id}`} className="block">
-        <h3 className="text-xl font-semibold mb-2 hover:underline">{question.title}</h3>
-      </Link>
+    <Link
+      href={`/questions/${question.id}`}
+      className="block rounded-lg border bg-card text-card-foreground shadow-sm p-6 hover:bg-accent hover:text-accent-foreground transition-colors"
+    >
+      <h3 className="text-xl font-semibold mb-2">{question.title}</h3>
       <div className="flex flex-wrap gap-2 mb-4">
         {question.tags.map((tag) => (
           <span
@@ -27,6 +28,6 @@ export default function QuestionCard({ question, authorName }: QuestionCardProps
         <span>Asked by {authorName}</span>
         <span>{formatDistanceToNow(new Date(question.createdAt), { addSuffix: true })}</span>
       </div>
-    </div>
+    </Link>
   )
 }

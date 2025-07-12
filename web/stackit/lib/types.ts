@@ -1,35 +1,36 @@
 export interface User {
-  id: string
+  id: string 
+  firebaseUid: string 
   name: string
   email: string
   role: "guest" | "user" | "admin"
 }
 
 export interface Question {
-  id: string
+  id: string 
   title: string
   description: string // HTML content from rich text editor
   tags: string[]
   authorId: string
   createdAt: string
   updatedAt: string
-  acceptedAnswerId?: string
+  acceptedAnswerId?: string 
 }
 
 export interface Answer {
-  id: string
+  id: string 
   questionId: string
-  content: string // HTML content from rich text editor
-  authorId: string
+  content: string
+  authorId: string 
   upvotes: string[] 
-  downvotes: string[] 
+  downvotes: string[]
   createdAt: string
   updatedAt: string
 }
 
 export interface Notification {
-  id: string
-  userId: string
+  id: string 
+  userId: string 
   type: "answer" | "comment" | "mention"
   message: string
   link: string
@@ -37,4 +38,7 @@ export interface Notification {
   createdAt: string
 }
 
-export const CURRENT_USER_ID = "user1"
+// CURRENT_USER_ID will now be dynamically fetched from the authenticated session.
+// This constant is no longer used directly for user identification in actions.
+// It's kept here for type consistency if needed elsewhere, but its value will be dynamic.
+export const CURRENT_USER_ID = "dynamic_user_id"

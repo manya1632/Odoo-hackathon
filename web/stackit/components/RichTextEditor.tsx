@@ -8,7 +8,7 @@ import { useEffect } from "react"
 
 interface RichTextEditorProps {
   content: string
-  onChange?: (html: string) => void 
+  onChange?: (html: string) => void // Make onChange optional
   editable?: boolean
 }
 

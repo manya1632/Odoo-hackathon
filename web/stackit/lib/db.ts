@@ -1,188 +1,272 @@
+import mongoose, { Schema, model, models, type Document, type Connection, type Model } from "mongoose"
 import type { Answer, Notification, Question, User } from "./types"
 
-// --- Mock Data ---
-const users: User[] = [
-  { id: 'user1', name: 'Alice', email: 'alice@example.com', role: 'user' },
-  { id: 'user2', name: 'Bob', email: 'bob@example.com', role: 'user' },
-  { id: 'admin1', name: 'Admin User', email: 'admin@example.com', role: 'admin' },
-]
+// Define Mongoose document interfaces that extend your base types
+interface UserDocument extends Omit<User, "id" | "createdAt" | "updatedAt">, Document {}
+interface QuestionDocument extends Omit<Question, "id" | "authorId" | "acceptedAnswerId">, Document {
+  authorId: mongoose.Types.ObjectId
+  acceptedAnswerId?: mongoose.Types.ObjectId
+}
+interface AnswerDocument extends Omit<Answer, "id" | "questionId" | "authorId" | "upvotes" | "downvotes">, Document {
+  questionId: mongoose.Types.ObjectId
+  authorId: mongoose.Types.ObjectId
+  upvotes: mongoose.Types.ObjectId[]
+  downvotes: mongoose.Types.ObjectId[]
+}
+interface NotificationDocument extends Omit<Notification, "id" | "userId">, Document {
+  userId: mongoose.Types.ObjectId
+}
 
-const questions: Question[] = [
-  {
-    id: 'q1',
-    title: 'How to set up Next.js with Tailwind CSS?',
-    description: `<p>I'm starting a new Next.js project and want to use Tailwind CSS. What's the best way to set it up with the App Router?</p>`,
-    tags: ['Next.js', 'Tailwind CSS'],
-    authorId: 'user1',
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: 'q2',
-    title: 'Understanding React Server Components',
-    description: `<p>Can someone explain the core concept of React Server Components and when to use them versus Client Components?</p>`,
-    tags: ['React', 'Next.js', 'Server Components'],
-    authorId: 'user2',
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-    updatedAt: new Date(Date.now() - 3600000).toISOString(),
-    acceptedAnswerId: 'a2',
-  },
-  {
-    id: 'q3',
-    title: 'Best practices for API routes in Next.js 15?',
-    description: `<p>With Next.js 15, what are the recommended best practices for structuring and securing API routes?</p>`,
-    tags: ['Next.js', 'API Routes'],
-    authorId: 'user1',
-    createdAt: new Date(Date.now() - 1800000).toISOString(),
-    updatedAt: new Date(Date.now() - 1800000).toISOString(),
-  },
-]
+// Declare global for mongoose cache to avoid 'Element implicitly has an 'any' type' error
+declare global {
+  // eslint-disable-next-line no-var
+  var mongooseCache:
+    | {
+        conn: Connection | null
+        promise: Promise<Connection> | null
+      }
+    | undefined
+}
 
-const answers: Answer[] = [
+// --- Mongoose Connection ---
+const MONGODB_URI = "mongodb+srv://manyacs1303:manya1632vishnu@stackit.crhrffo.mongodb.net/"
+
+if (!MONGODB_URI) {
+  throw new Error("Please define the MONGODB_URI environment variable inside .env.local")
+}
+
+let cached = global.mongooseCache
+
+if (!cached) {
+  cached = global.mongooseCache = { conn: null, promise: null }
+}
+
+async function dbConnect(): Promise<Connection> {
+  if (cached!.conn) {
+    return cached!.conn
+  }
+  if (!cached!.promise) {
+    const opts = {
+      bufferCommands: false,
+    }
+    // Reverted to direct mongoose.connect
+    cached!.promise = mongoose.connect(MONGODB_URI!, opts).then((mongooseInstance) => {
+      return mongooseInstance.connection
+    })
+  }
+  cached!.conn = await cached!.promise
+  return cached!.conn
+}
+
+// Ensure connection is established before models are defined/accessed
+// This is crucial for `mongoose.models` to be properly initialized.
+dbConnect().catch((err) => console.error("Failed to connect to MongoDB on module load:", err))
+
+// --- Mongoose Schemas ---
+const UserSchema = new Schema<UserDocument>(
   {
-    id: 'a1',
-    questionId: 'q1',
-    content: `<p>You can use <code>npx create-next-app@latest</code> and select Tailwind CSS during setup. It handles most of the configuration for you!</p>`,
-    authorId: 'user2',
-    upvotes: ['user1'],
-    downvotes: [],
-    createdAt: new Date(Date.now() - 80000000).toISOString(),
-    updatedAt: new Date(Date.now() - 80000000).toISOString(),
+    firebaseUid: { type: String, required: true, unique: true },
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    role: { type: String, enum: ["guest", "user", "admin"], default: "user" },
   },
+  { timestamps: true },
+)
+
+const QuestionSchema = new Schema<QuestionDocument>(
   {
-    id: 'a2',
-    questionId: 'q2',
-    content: `<p>Server Components render on the server, reducing client-side JavaScript and improving initial page load. Client Components are for interactivity and client-side state.</p>`,
-    authorId: 'user1',
-    upvotes: ['user2'],
-    downvotes: [],
-    createdAt: new Date(Date.now() - 3000000).toISOString(),
-    updatedAt: new Date(Date.now() - 3000000).toISOString(),
+    title: { type: String, required: true },
+    description: { type: String, required: true },
+    tags: [{ type: String }],
+    authorId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    acceptedAnswerId: { type: Schema.Types.ObjectId, ref: "Answer" },
   },
+  { timestamps: true },
+)
+
+const AnswerSchema = new Schema<AnswerDocument>(
   {
-    id: 'a3',
-    questionId: 'q3',
-    content: `<p>Use Route Handlers (<code>route.ts</code>) for API routes. They are powerful and integrate well with the App Router. Consider using Zod for input validation.</p>`,
-    authorId: 'user2',
+    questionId: { type: Schema.Types.ObjectId, ref: "Question", required: true },
+    content: { type: String, required: true },
+    authorId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    upvotes: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    downvotes: [{ type: Schema.Types.ObjectId, ref: "User" }],
+  },
+  { timestamps: true },
+)
+
+const NotificationSchema = new Schema<NotificationDocument>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    type: { type: String, enum: ["answer", "comment", "mention"], required: true },
+    message: { type: String, required: true },
+    link: { type: String, required: true },
+    read: { type: Boolean, default: false },
+  },
+  { timestamps: true },
+)
+
+// --- Mongoose Models ---
+// Helper function to get or create a Mongoose model, robust against hot-reloading
+function getModel<T extends Document>(name: string, schema: Schema<T>): Model<T> {
+  // Check if the model already exists in mongoose.models
+  if (models[name]) {
+    return models[name] as Model<T>
+  }
+  // If not, create and return the new model
+  return model<T>(name, schema)
+}
+
+export const UserModel = getModel<UserDocument>("User", UserSchema)
+export const QuestionModel = getModel<QuestionDocument>("Question", QuestionSchema)
+export const AnswerModel = getModel<AnswerDocument>("Answer", AnswerSchema)
+export const NotificationModel = getModel<NotificationDocument>("Notification", NotificationSchema)
+
+// Helper function to convert MongoDB document to your interface format
+export const convertToUserInterface = (doc: any): User => ({
+  id: doc._id.toString(),
+  firebaseUid: doc.firebaseUid,
+  name: doc.name,
+  email: doc.email,
+  role: doc.role,
+})
+export const convertToQuestionInterface = (doc: any): Question => ({
+  id: doc._id.toString(),
+  title: doc.title,
+  description: doc.description,
+  tags: doc.tags,
+  authorId: doc.authorId.toString(),
+  acceptedAnswerId: doc.acceptedAnswerId?.toString(),
+  createdAt: doc.createdAt.toISOString(),
+  updatedAt: doc.updatedAt.toISOString(),
+})
+export const convertToAnswerInterface = (doc: any): Answer => ({
+  id: doc._id.toString(),
+  questionId: doc.questionId.toString(),
+  content: doc.content,
+  authorId: doc.authorId.toString(),
+  upvotes: doc.upvotes.map((id: any) => id.toString()),
+  downvotes: doc.downvotes.map((id: any) => id.toString()),
+  createdAt: doc.createdAt.toISOString(),
+  updatedAt: doc.updatedAt.toISOString(),
+})
+export const convertToNotificationInterface = (doc: any): Notification => ({
+  id: doc._id.toString(),
+  userId: doc.userId.toString(),
+  type: doc.type,
+  message: doc.message,
+  link: doc.link,
+  read: doc.read,
+  createdAt: doc.createdAt.toISOString(),
+})
+
+// --- Database Operations (using Mongoose) ---
+export const getQuestions = async (): Promise<Question[]> => {
+  await dbConnect()
+  const docs = await QuestionModel.find({}).sort({ createdAt: -1 }).lean()
+  return docs.map(convertToQuestionInterface)
+}
+export const getQuestionById = async (id: string): Promise<Question | null> => {
+  await dbConnect()
+  const doc = await QuestionModel.findById(id).lean()
+  return doc ? convertToQuestionInterface(doc) : null
+}
+export const createQuestion = async (
+  questionData: Omit<Question, "id" | "createdAt" | "updatedAt">,
+): Promise<Question> => {
+  await dbConnect()
+  const doc = await QuestionModel.create({
+    ...questionData,
+    authorId: new mongoose.Types.ObjectId(questionData.authorId),
+    acceptedAnswerId: questionData.acceptedAnswerId
+      ? new mongoose.Types.ObjectId(questionData.acceptedAnswerId)
+      : undefined,
+  })
+  return convertToQuestionInterface(doc.toObject())
+}
+export const getAnswersForQuestion = async (questionId: string): Promise<Answer[]> => {
+  await dbConnect()
+  const docs = await AnswerModel.find({ questionId }).sort({ createdAt: 1 }).lean()
+  return docs.map(convertToAnswerInterface)
+}
+export const createAnswer = async (
+  answerData: Omit<Answer, "id" | "createdAt" | "updatedAt" | "upvotes" | "downvotes">,
+): Promise<Answer> => {
+  await dbConnect()
+  const doc = await AnswerModel.create({
+    questionId: new mongoose.Types.ObjectId(answerData.questionId),
+    content: answerData.content,
+    authorId: new mongoose.Types.ObjectId(answerData.authorId),
     upvotes: [],
     downvotes: [],
-    createdAt: new Date(Date.now() - 1000000).toISOString(),
-    updatedAt: new Date(Date.now() - 1000000).toISOString(),
-  },
-]
-
-const notifications: Notification[] = [
-  {
-    id: 'n1',
-    userId: 'user1',
-    type: 'answer',
-    message: 'Bob answered your question "Understanding React Server Components"',
-    link: '/questions/q2',
-    read: false,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'n2',
-    userId: 'user2',
-    type: 'mention',
-    message: 'Alice mentioned you in a comment.',
-    link: '/questions/q1',
-    read: true,
-    createdAt: new Date(Date.now() - 60000).toISOString(),
-  },
-  {
-    id: 'n3',
-    userId: 'user1',
-    type: 'answer',
-    message: 'Bob answered your question "How to set up Next.js with Tailwind CSS?"',
-    link: '/questions/q1',
-    read: false,
-    createdAt: new Date().toISOString(),
-  },
-]
-
-// --- Helper Functions ---
-export const getQuestions = () =>
-  questions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-
-export const getQuestionById = (id: string) => questions.find((q) => q.id === id)
-
-export const createQuestion = (question: Omit<Question, 'id' | 'createdAt' | 'updatedAt'>) => {
-  const newQuestion: Question = {
-    ...question,
-    id: `q${questions.length + 1}`,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
-  questions.unshift(newQuestion)
-  return newQuestion
+  })
+  return convertToAnswerInterface(doc.toObject())
 }
-
-export const getAnswersForQuestion = (questionId: string) =>
-  answers
-    .filter((a) => a.questionId === questionId)
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-
-export const createAnswer = (
-  answer: Omit<Answer, 'id' | 'createdAt' | 'updatedAt' | 'upvotes' | 'downvotes'>
-) => {
-  const newAnswer: Answer = {
-    ...answer,
-    id: `a${answers.length + 1}`,
-    upvotes: [],
-    downvotes: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
-  answers.push(newAnswer)
-  return newAnswer
+export const getNotificationsForUser = async (userId: string): Promise<Notification[]> => {
+  await dbConnect()
+  const docs = await NotificationModel.find({ userId }).sort({ createdAt: -1 }).lean()
+  return docs.map(convertToNotificationInterface)
 }
-
-export const getNotificationsForUser = (userId: string) =>
-  notifications
-    .filter((n) => n.userId === userId)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-
-export const getUnreadNotificationCount = (userId: string) =>
-  notifications.filter((n) => n.userId === userId && !n.read).length
-
-export const markNotificationAsRead = (id: string) => {
-  const notification = notifications.find((n) => n.id === id)
-  if (notification) notification.read = true
+export const getUnreadNotificationCount = async (userId: string): Promise<number> => {
+  await dbConnect()
+  return NotificationModel.countDocuments({ userId, read: false })
 }
-
-export const getUserById = (id: string) => users.find((u) => u.id === id)
-
-export const toggleVote = (answerId: string, userId: string, type: 'up' | 'down') => {
-  const answer = answers.find((a) => a.id === answerId)
+export const markNotificationAsRead = async (id: string): Promise<Notification | null> => {
+  await dbConnect()
+  const doc = await NotificationModel.findByIdAndUpdate(id, { read: true }, { new: true }).lean()
+  return doc ? convertToNotificationInterface(doc) : null
+}
+export const getUserById = async (id: string): Promise<User | null> => {
+  await dbConnect()
+  const doc = await UserModel.findById(id).lean()
+  return doc ? convertToUserInterface(doc) : null
+}
+export const getUserByFirebaseUid = async (firebaseUid: string): Promise<User | null> => {
+  await dbConnect()
+  const doc = await UserModel.findOne({ firebaseUid }).lean()
+  return doc ? convertToUserInterface(doc) : null
+}
+export const createUser = async (userData: Omit<User, "id" | "role">): Promise<User> => {
+  await dbConnect()
+  const doc = await UserModel.create(userData)
+  return convertToUserInterface(doc.toObject())
+}
+export const toggleVote = async (answerId: string, userId: string, type: "up" | "down"): Promise<Answer | null> => {
+  await dbConnect()
+  const answer = await AnswerModel.findById(answerId)
   if (!answer) return null
-
-  if (type === 'up') {
-    if (answer.upvotes.includes(userId)) {
-      answer.upvotes = answer.upvotes.filter((id) => id !== userId)
+  const userObjectId = new mongoose.Types.ObjectId(userId)
+  if (type === "up") {
+    const upvoteIndex = answer.upvotes.findIndex((id: mongoose.Types.ObjectId) => id.toString() === userId)
+    if (upvoteIndex !== -1) {
+      answer.upvotes.splice(upvoteIndex, 1)
     } else {
-      answer.upvotes.push(userId)
-      answer.downvotes = answer.downvotes.filter((id) => id !== userId)
+      answer.upvotes.push(userObjectId)
+      const downvoteIndex = answer.downvotes.findIndex((id: mongoose.Types.ObjectId) => id.toString() === userId)
+      if (downvoteIndex !== -1) {
+        answer.downvotes.splice(downvoteIndex, 1)
+      }
     }
   } else {
-    if (answer.downvotes.includes(userId)) {
-      answer.downvotes = answer.downvotes.filter((id) => id !== userId)
+    const downvoteIndex = answer.downvotes.findIndex((id: mongoose.Types.ObjectId) => id.toString() === userId)
+    if (downvoteIndex !== -1) {
+      answer.downvotes.splice(downvoteIndex, 1)
     } else {
-      answer.downvotes.push(userId)
-      answer.upvotes = answer.upvotes.filter((id) => id !== userId)
+      answer.downvotes.push(userObjectId)
+      const upvoteIndex = answer.upvotes.findIndex((id: mongoose.Types.ObjectId) => id.toString() === userId)
+      if (upvoteIndex !== -1) {
+        answer.upvotes.splice(upvoteIndex, 1)
+      }
     }
   }
-
-  answer.updatedAt = new Date().toISOString()
-  return answer
+  await answer.save()
+  return convertToAnswerInterface(answer.toObject())
 }
-
-export const acceptAnswer = (questionId: string, answerId: string) => {
-  const question = questions.find((q) => q.id === questionId)
-  if (question) {
-    question.acceptedAnswerId = answerId
-    question.updatedAt = new Date().toISOString()
-    return question
-  }
-  return null
+export const acceptAnswer = async (questionId: string, answerId: string): Promise<Question | null> => {
+  await dbConnect()
+  const question = await QuestionModel.findById(questionId)
+  if (!question) return null
+  question.acceptedAnswerId = new mongoose.Types.ObjectId(answerId)
+  await question.save()
+  return convertToQuestionInterface(question.toObject())
 }
